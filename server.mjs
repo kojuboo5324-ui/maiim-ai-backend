@@ -9,7 +9,7 @@ const CLIENT_KEY = String(process.env.LUMI_CLIENT_KEY || "").trim();
 const REALTIME_MODEL = String(process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1-mini").trim();
 const CHAT_MODEL = String(process.env.OPENAI_CHAT_MODEL || "gpt-5.6-luna").trim();
 const VOICE = String(process.env.OPENAI_VOICE || "marin").trim();
-const ALLOWED_REALTIME_VOICES = new Set(["marin", "cedar"]);
+const ALLOWED_REALTIME_VOICES = new Set(["alloy","ash","ballad","coral","echo","sage","shimmer","verse","marin","cedar"]);
 
 function resolveRealtimeVoice(value) {
   const v = String(value || "").trim().toLowerCase();
@@ -115,7 +115,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-10-66" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-10-67" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
