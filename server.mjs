@@ -9,6 +9,12 @@ const CLIENT_KEY = String(process.env.LUMI_CLIENT_KEY || "").trim();
 const REALTIME_MODEL = String(process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1-mini").trim();
 const CHAT_MODEL = String(process.env.OPENAI_CHAT_MODEL || "gpt-5.6-luna").trim();
 const VOICE = String(process.env.OPENAI_VOICE || "marin").trim();
+const ALLOWED_REALTIME_VOICES = new Set(["marin", "cedar"]);
+
+function resolveRealtimeVoice(value) {
+  const v = String(value || "").trim().toLowerCase();
+  return ALLOWED_REALTIME_VOICES.has(v) ? v : (ALLOWED_REALTIME_VOICES.has(VOICE) ? VOICE : "marin");
+}
 
 app.use(cors({
   origin: true,
@@ -67,11 +73,21 @@ function buildSkinSummary(ctx) {
 
 function lumiInstructions(ctx) {
   return `당신은 "AI 피부 척척박사 루미"입니다.
-한국어로 따뜻하고 또박또박, 너무 길지 않게 대화합니다.
-한 번에 질문 하나만 하며 고객의 답을 듣고 다음 질문으로 이어갑니다.
+한국어로 차분하고 따뜻하며 점잖게 대화하는 피부관리 상담 AI입니다.
+평소 대화보다 약간 느린 속도로 또박또박 말하고, 문장 사이에 자연스러운 여유를 둡니다.
+고객의 말이 끝나기 전에 먼저 답하지 마세요. 짧은 침묵이 있어도 고객이 생각하거나 말을 이어갈 수 있으므로 충분히 기다립니다.
+고객이 당신이 말하는 중간에 다시 말을 시작하면 설명을 밀어붙이지 말고 고객의 말을 우선 들어주세요.
+한 번에 질문은 하나만 합니다. 답변도 보통 2~4문장 정도로 짧고 편안하게 한 뒤 다음 질문 하나로 이어갑니다.
 
-[역할]
-- 피부관리 상담을 돕는 AI입니다. 의료인이 아니며 질병을 확정 진단하거나 치료를 지시하지 않습니다.
+[상담 태도]
+- 피부 문제로 오래 힘들어했거나 불편함·걱정·속상함을 표현하면, 정보 설명 전에 먼저 한 문장 정도 공감합니다.
+- 상황에 맞게 "많이 불편하셨겠어요.", "그동안 꽤 힘드셨겠네요.", "관리하시느라 많이 애쓰셨겠습니다.", "그래도 그동안 잘 견뎌오셨네요." 같은 표현을 자연스럽게 바꾸어 사용합니다.
+- 같은 위로 문구를 매번 반복하지 말고, 가벼운 고민에는 과도한 위로를 하지 않습니다.
+- 고객을 어린아이처럼 대하거나 과장해서 안심시키지 말고, 존중하는 어른 대 어른의 말투를 유지합니다.
+- 먼저 충분히 듣고, 그 다음 가능한 원인과 관리 방향을 설명합니다.
+
+[역할과 안전]
+- 피부관리 상담을 돕는 AI입니다. 실제 의료인이 아니며 질병을 확정 진단하거나 치료를 지시하지 않습니다.
 - 가능한 원인 후보, 생활관리, 화장품/성분 사용 시 주의점, 상담 시 확인할 내용을 구분해서 설명합니다.
 - 피부체크 점수는 의학적 진단 점수가 아니라 앱 문항에서 관련 신호가 얼마나 체크됐는지 보는 참고 지수라고 설명합니다.
 - 심한 통증, 진물/고름, 빠르게 번지는 발진, 눈 주변 심한 증상, 갑작스럽고 심한 탈모, 입술·혀·목 붓기나 호흡곤란 등 위험 신호가 있으면 의료기관 확인을 우선 안내합니다. 호흡곤란이나 목 붓기가 현재 있으면 119 또는 응급실을 우선 안내합니다.
@@ -82,7 +98,8 @@ function lumiInstructions(ctx) {
 [현재 고객 피부체크 참고 정보]
 ${buildSkinSummary(ctx)}
 
-먼저 짧게 인사하고, 위 결과를 확인했다고 자연스럽게 말한 뒤 지금 가장 불편한 증상 하나를 물어보세요.`;
+처음 연결되면 짧고 차분하게 인사하고, 피부체크 결과가 있으면 확인했다고 한 문장으로 알려주세요.
+그 다음 "천천히 말씀해 주세요. 지금 가장 불편한 피부 고민은 무엇인가요?"처럼 질문 하나만 하고 고객의 답을 기다리세요.`;
 }
 
 function extractResponseText(data) {
@@ -98,7 +115,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-10-65" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-10-66" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
@@ -117,6 +134,7 @@ app.post("/api/realtime", requireClient, async (req, res) => {
 
   const sdp = String(req.body?.sdp || "");
   const skinContext = req.body?.skinContext || null;
+  const preferredVoice = resolveRealtimeVoice(req.body?.preferredVoice);
   if (!sdp.startsWith("v=0")) return res.status(400).json({ error: "invalid_sdp" });
 
   const sessionConfig = {
@@ -125,9 +143,17 @@ app.post("/api/realtime", requireClient, async (req, res) => {
     output_modalities: ["audio"],
     instructions: lumiInstructions(skinContext),
     audio: {
-      output: { voice: VOICE }
+      input: {
+        turn_detection: {
+          type: "semantic_vad",
+          eagerness: "low",
+          create_response: true,
+          interrupt_response: true
+        }
+      },
+      output: { voice: preferredVoice }
     },
-    max_output_tokens: 900,
+    max_output_tokens: 500,
   };
 
   try {
