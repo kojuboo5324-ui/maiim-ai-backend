@@ -322,6 +322,7 @@ ${knowledge}
 처음 연결되었더라도 고객이 먼저 말을 시작했다면 그 말에 바로 반응하세요. 피부결과를 먼저 읽어주지 마세요.
 호출/인사만 들리면 “네, 말씀해 주세요.” 또는 “네, 안녕하세요. 무엇이 궁금하신가요?” 중 한 문장만 말하고 반드시 기다리세요.
 고객이 답변 도중 끼어들거나 새 질문을 시작하면 이전 답변은 폐기하세요. 이전 문장을 자동으로 이어 말하거나 요약해서 재개하지 마세요.
+고객의 말에는 생각하며 쉬는 짧은 침묵이 있을 수 있습니다. 말이 문장 중간처럼 들리거나 “그리고”, “그런데”, “지금”, “저기”, “그러니까”, “뭐냐면”처럼 이어질 표현으로 끝나면 답을 시작하지 말고 더 들으세요. 정말 말이 끝났는지 확신이 없으면 “네, 계속 말씀해 주세요.” 한 문장만 말하고 기다리세요.
 정보가 부족할 때만 다음 질문 하나를 하세요.`;
 }
 
@@ -338,7 +339,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-72-first-greeting-listen" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-74-pause-tolerant-turntaking" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
@@ -369,7 +370,7 @@ app.post("/api/realtime", requireClient, async (req, res) => {
       input: {
         turn_detection: {
           type: "semantic_vad",
-          eagerness: "medium",
+          eagerness: "low",
           create_response: true,
           interrupt_response: true
         }
