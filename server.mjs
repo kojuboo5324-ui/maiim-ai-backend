@@ -370,7 +370,8 @@ app.post("/api/realtime", requireClient, async (req, res) => {
       input: {
         turn_detection: {
           type: "semantic_vad",
-          eagerness: "low",
+          // V75: 말 끊김을 줄이면서도 과도한 대기(최대 8초)를 피하도록 균형 조정
+          eagerness: "medium",
           create_response: true,
           interrupt_response: true
         }
