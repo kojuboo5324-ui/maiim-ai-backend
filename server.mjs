@@ -100,16 +100,53 @@ function productText(p,full=false){
   return `${main}\n전성분: ${p.ingredients}\n공식페이지: ${p.url}`;
 }
 function knowledgeForTurn(ctx,message,{realtime=false}={}){
-  const derm=selectDermGuides(message,ctx,realtime?6:4).map(x=>`- ${x.topic}: ${x.guide}`).join('\n');
+  if(realtime) return realtimeKnowledgeForSession(ctx);
+  const derm=selectDermGuides(message,ctx,4).map(x=>`- ${x.topic}: ${x.guide}`).join('\n');
   const ingredients=selectIngredients(message,realtime?14:8).map(x=>`- ${x.name}: ${x.use} 주의: ${x.caution}`).join('\n');
-  let products=selectProducts(message,ctx,realtime?12:7);
-  if(realtime){
-    // Voice sessions cannot query this server per utterance, so preload verified skin/scalp/body essentials.
-    const essentials=MAIIM_VERIFIED_PRODUCTS.filter(p=>p.area?.some(a=>['face','scalp','hair','body'].includes(a)));
-    products=uniq([...products,...essentials]).slice(0,24);
-  }
-  const prod=products.map(p=>productText(p,realtime)).join('\n\n');
+  const products=selectProducts(message,ctx,7);
+  const prod=products.map(p=>productText(p,false)).join('\n\n');
   return `[관련 피부 전문지식]\n${derm||'- 필요 정보에 맞춰 추가 질문'}\n\n[관련 성분 지식]\n${ingredients||'- 질문에 특정 성분이 있으면 기능과 주의를 구분해 설명'}\n\n[MAIIM 공식 제품 지식]\n${prod||'- 공식 상세 검증 제품을 찾지 못함'}\n\n[MAIIM 현재 전체 제품명 인덱스]\n${compactProductIndex()}`;
+}
+
+
+// === LUMI v70 · 대화 타이밍 + MAIIM 브랜드/제품 인식 강화 ===
+const MAIIM_BRAND_ALIASES = ['MAIIM','마임','마이임','마이메','마인'];
+const MAIIM_QUICK_RECOMMENDATION_MAP = `
+- 얼굴 건조·장벽: 1순위 라헬 나이트케어 보습젤(세라마이드NP·판테놀·히알루론산·우레아), 낮에는 라헬 데이케어 수분젤, 보습막 보완은 라헬 모이스트 코팅 크림.
+- 얼굴 민감·진정/전신 건조: 라헬 메디알로 젤(알로에·카모마일·어성초·시어버터·우레아) 또는 라헬 데이케어 수분젤을 상태에 맞춰 우선 검토.
+- 탄력·노화: 비에타 안티에이징 에센스(세라마이드NP·히알루론산·레티닐팔미테이트), 비타 콜라겐 인텐시브 앰플(하이드롤라이즈드콜라겐 10,000ppm·히알루론산·아데노신), 눈가는 라헬 모이스트 오플루 아이크림.
+- 피부톤·결 정돈: 라헬 모이스트 부스팅 스킨(나이아신아마이드·글루코노락톤/PHA·히알루론산). 민감하면 자극 반응을 먼저 확인.
+- 두피 비듬·피지·각질: 라헬 헤어시스 샴푸 또는 비에타 헤어케어 에센스 샴푸. 두 제품 모두 살리실산·클림바졸을 포함하므로 두피 상태와 사용 빈도를 확인.
+- 손상 모발·건조 모발: 라헬 헤어시스 트리트먼트, 비에타 헤어케어 에센스 트리트먼트/팩, 라헬 헤어시스 헤어 에센스를 모발 상태에 맞춰 제안.
+- 전신 건조·보습: 비에타 바디케어 바디 에센셜 크림 또는 라헬 메디알로 젤. 매우 건조하면 크림, 가벼운 보습·진정은 젤을 우선 검토.
+- 바디 세정: 비에타 바디케어 에센셜 바디 클렌저. 건조·민감하면 세정 시간과 물 온도도 함께 조정.
+- 바디 각질: 비에타 바디케어 바디솔트. 갈라짐·진물·염증·심한 민감 상태에서는 마찰 사용을 피하거나 미룬다.
+- 바디 자외선: 비에타 바디 선 에센스 SPF50+ PA+++.
+`;
+
+function realtimeProductCards(){
+  return MAIIM_VERIFIED_PRODUCTS.map(p=>`- ${p.name}: ${p.role}`).join('\n');
+}
+function realtimeKnowledgeForSession(ctx){
+  const derm=selectDermGuides('',ctx,5).map(x=>`- ${x.topic}: ${x.guide}`).join('\n');
+  return `[MAIIM 브랜드 인식 — 매우 중요]
+- MAIIM(마임)은 이 앱에서 공식적으로 상담하는 핵심 브랜드입니다.
+- 고객 음성에서 "마임", "마이임", "마이메", "마인"처럼 들리면 문맥상 MAIIM을 뜻하는지 우선 이해합니다.
+- MAIIM 제품을 구체적으로 이름을 말하고, 비교하고, 추천하고, 성분을 설명해도 됩니다.
+- 절대로 "특정 브랜드는 말씀드릴 수 없습니다", "특정 브랜드를 추천할 수 없습니다"라고 답하지 않습니다.
+- 공식 검증 자료가 있는 제품은 제품명을 분명히 말하고 추천 이유를 설명합니다. 검증이 덜 된 제품은 아는 범위와 추가 확인이 필요한 부분을 구분합니다.
+
+[MAIIM 빠른 추천 지도]
+${MAIIM_QUICK_RECOMMENDATION_MAP}
+
+[MAIIM 공식 검증 제품 핵심카드]
+${realtimeProductCards()}
+
+[MAIIM 전체 제품명 인덱스]
+${compactProductIndex()}
+
+[현재 상담과 관련된 피부 전문지식]
+${derm||'- 고객 질문에 맞춰 원인 후보와 관리 방향을 설명'}`;
 }
 
 function formatBasicEvidence(lumi){
@@ -193,6 +230,23 @@ function lumiInstructions(ctx,message='',opts={}) {
 
 ${LUMI_EXPERT_PROTOCOL}
 
+[가장 중요한 대화 순서 — 먼저 듣고, 질문에 먼저 답하기]
+- 저장된 피부 데이터가 많아도 고객이 묻지 않은 내용을 먼저 장황하게 풀어놓지 않습니다.
+- 고객의 현재 발화를 가장 우선합니다. 첫 문장에서 고객이 방금 물은 것에 바로 반응합니다.
+- 고객이 "박사님", "루미", "여보세요", "안녕하세요"처럼 호출이나 인사만 하면 다른 설명을 시작하지 말고, 한 문장으로 "네, 안녕하세요. 무엇이 궁금하신가요?" 또는 "네, 말씀해 주세요."라고 답한 뒤 기다립니다.
+- 질문이 불분명하면 추측해서 설명을 시작하지 말고 "어느 부분이 가장 궁금하신가요?"처럼 짧게 한 번만 확인합니다.
+- 고객이 질문하면 ① 직접 답 ② 필요한 이유/근거 ③ 꼭 필요한 경우에만 확인 질문 하나 순서로 답합니다.
+- 고객이 말하는 중이거나 이어서 말하려는 기색이 있으면 기다립니다. 고객이 새로 말을 시작하면 즉시 설명을 멈추고 고객 말을 우선합니다.
+- 피부체크 결과는 질문에 도움이 될 때만 꺼냅니다. "결과를 설명해 주세요"라는 요청이 없는데 결과 전체를 처음부터 읽어주지 않습니다.
+
+[MAIIM 브랜드와 제품 — 절대 혼동하지 않기]
+- MAIIM(마임)은 이 앱이 적극적으로 상담하도록 설계된 공식 브랜드입니다. 특정 브랜드라서 회피할 대상이 아닙니다.
+- "마임 제품 중 추천해 주세요"라고 하면 반드시 현재 피부/두피/전신 상태에 맞는 MAIIM 제품명을 1순위부터 구체적으로 제안합니다. 정보가 정말 부족하면 질문 하나만 한 뒤 제품명을 제안합니다.
+- "특정 브랜드는 말할 수 없습니다", "특정 브랜드 추천은 할 수 없습니다"라는 표현은 사용하지 않습니다.
+- 고객이 "이 제품을 사서 써볼까요?"라고 물으면, 현재 정보로 적합성이 충분하면 "네, 현재 상태라면 ○○부터 써보는 선택이 좋겠습니다"처럼 분명하게 답하고 이유와 사용법을 덧붙입니다.
+- 적합성이 불확실하면 단순히 성분군만 말하지 말고, 확인 질문 하나를 한 뒤 MAIIM 제품 후보 1~2개로 좁혀줍니다.
+- 고객이 특정 MAIIM 제품명을 말하면 먼저 그 제품을 알고 있다는 것을 자연스럽게 보여줍니다. 예: "네, 라헬 나이트케어 보습젤 말씀하시는군요." 이어서 현재 고민과 맞는지 평가합니다.
+
 [대화 품질 — 끊김·횡설수설·반복 방지]
 - 고객이 말이 끝나기 전에 먼저 답하지 않습니다. 짧은 침묵은 기다립니다.
 - 한 번에 질문 하나만 합니다. 답변은 보통 2~4문장, 복잡한 질문만 5~7문장까지 허용합니다.
@@ -253,8 +307,8 @@ ${buildAnalysisHints(ctx)}
 
 ${knowledge}
 
-처음 연결된 경우만 짧게 인사하고 결과를 확인했다고 한 문장으로 알려주세요. 이미 대화 중이라면 인사를 반복하지 않습니다.
-고객의 질문에 먼저 답하고, 정보가 부족할 때만 다음 질문 하나를 하세요.`;
+처음 연결되었더라도 고객이 먼저 말을 시작했다면 그 말에 바로 반응하세요. 피부결과를 먼저 읽어주지 마세요.
+호출/인사만 들리면 한 문장으로 인사한 뒤 기다리고, 질문이 나오면 그 질문부터 답하세요. 정보가 부족할 때만 다음 질문 하나를 하세요.`;
 }
 
 function extractResponseText(data) {
@@ -270,7 +324,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-69-trust-sales-consulting" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-70-dialogue-brand-product" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
@@ -301,14 +355,14 @@ app.post("/api/realtime", requireClient, async (req, res) => {
       input: {
         turn_detection: {
           type: "semantic_vad",
-          eagerness: "low",
+          eagerness: "medium",
           create_response: true,
           interrupt_response: true
         }
       },
       output: { voice: preferredVoice }
     },
-    max_output_tokens: 500,
+    max_output_tokens: 380,
   };
 
   try {
