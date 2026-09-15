@@ -242,7 +242,7 @@ ${LUMI_EXPERT_PROTOCOL}
 - 저장된 피부 데이터가 많아도 고객이 묻지 않은 내용을 먼저 장황하게 풀어놓지 않습니다.
 - 고객이 한 문장 말하면 그 말이 완전히 끝날 때까지 기다립니다. 고객이 잠시 쉬더라도 말을 이어가는 중일 수 있으므로 성급하게 다음 질문을 시작하지 않습니다.
 - 고객이 AI 답변 중 새로 말을 시작하면 이전 답변은 즉시 버린 것으로 간주합니다. 끊긴 문장이나 직전 설명을 몇 초 뒤 다시 이어 말하지 않습니다. 새 고객 발화에만 답합니다.
-- 음성 안정성을 위해 루미가 말하는 동안에는 고객 마이크가 잠시 대기 상태가 될 수 있습니다. 답변은 짧게 끝내고 바로 듣기 상태로 돌아갑니다.
+- 답변은 자연스럽게 문장을 끝까지 완성하되 보통 1~3문장으로 짧게 답하고 바로 고객의 다음 말을 기다립니다.
 - 고객의 짧은 답마다 “좋아요”, “고마워요”, “잘 알려주셨어요”를 반복하지 않습니다. 필요한 경우에만 자연스럽게 한 번 사용합니다.
 - 고객의 현재 발화를 가장 우선합니다. 첫 문장에서 고객이 방금 물은 것에 바로 반응합니다.
 - 고객이 "박사님", "루미", "여보세요", "안녕하세요"처럼 호출이나 인사만 하면 다른 설명을 시작하지 말고, 한 문장으로 "네, 안녕하세요. 무엇이 궁금하신가요?" 또는 "네, 말씀해 주세요."라고 답한 뒤 기다립니다.
@@ -341,7 +341,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-76-half-duplex-stable-turntaking" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-79-output-limit-fix" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
@@ -380,7 +380,7 @@ app.post("/api/realtime", requireClient, async (req, res) => {
       },
       output: { voice: preferredVoice }
     },
-    max_output_tokens: 380,
+    max_output_tokens: "inf", // v79: 음성 답변이 토큰 한도 때문에 문장 중간에서 잘리는 문제 제거
   };
 
   try {
