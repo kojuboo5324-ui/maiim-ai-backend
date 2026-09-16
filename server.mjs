@@ -1036,6 +1036,146 @@ function checkCompletionGuide(ctx){
 - “체크를 하지 않으셨군요”라는 안내를 하지 말고, 연결된 결과를 고객 질문에 필요한 범위에서 활용합니다.`;
 }
 
+
+function buildRealtimeCompactContext(ctx){
+  const c=clean(ctx)||{}, lumi=c.lumi||{};
+  const labels={barrier:'건조·장벽',sensitive:'민감·홍조',acne:'피지·여드름',pigment:'색소',aging:'탄력·노화',scalp:'두피·모발',bodyitch:'몸 가려움',cosmetic:'제품반응',lifestyle:'생활·전신',hormone:'호르몬'};
+  const scores=lumi?.basicAnalysis?.scores&&typeof lumi.basicAnalysis.scores==='object'?lumi.basicAnalysis.scores:{};
+  const topScores=Object.entries(scores)
+    .map(([k,v])=>({k,v:Number(v||0)}))
+    .filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,4)
+    .map(x=>`${labels[x.k]||x.k}:${x.v}`).join(', ');
+
+  const basic=lumi?.basicAnswers&&typeof lumi.basicAnswers==='object'?lumi.basicAnswers:{};
+  const basicEvidence=Object.entries(basic)
+    .filter(([_,v])=>v!==''&&v!==null&&v!==undefined && !(Array.isArray(v)&&v.length===0))
+    .slice(0,12)
+    .map(([k,v])=>`${k}=${Array.isArray(v)?v.join('|'):v}`).join(', ');
+
+  const precision=Array.isArray(lumi.completedPrecision)?lumi.completedPrecision:[];
+  const pSignals=[], risks=[];
+  for(const p of precision){
+    for(const x of (Array.isArray(p.urgentRisks)?p.urgentRisks:[])) risks.push(`즉시:${x}`);
+    for(const x of (Array.isArray(p.risks)?p.risks:[])) risks.push(`주의:${x}`);
+    for(const a of (Array.isArray(p.answers)?p.answers:[])){
+      if(Number(a?.value||0)>=2 || /진물|고름|통증|호흡|붓|출혈|갑작|빠르게/.test(String(a?.question||''))){
+        pSignals.push(`${p.title||p.key}:${a.question}→${a.answer}`);
+      }
+    }
+  }
+
+  return [
+    `부위:${lumi.area||'-'}`,
+    `주요고민:${Array.isArray(lumi.concerns)&&lumi.concerns.length?lumi.concerns.join(', '):(c.selfConcern||'-')}`,
+    `기간:${lumi.duration||'-'}`,
+    `연령:${lumi.age||c.age||'-'} / 성별:${lumi.gender||c.gender||'-'}`,
+    `피부유형:${c.skinType||'-'} / 관리1순위:${c.primary||'-'}`,
+    `기본상위:${topScores||'-'}`,
+    `기본실제답:${basicEvidence||'-'}`,
+    `정밀핵심:${pSignals.slice(0,8).join(' / ')||'-'}`,
+    `위험/주의:${risks.slice(0,5).join(' / ')||'현재 기록상 뚜렷한 위험신호 없음'}`,
+    `변화요인:${Array.isArray(lumi.changes)&&lumi.changes.length?lumi.changes.join(', '):'-'}`
+  ].join('\n');
+}
+
+function buildRealtimeCompactKnowledge(ctx){
+  const derm=selectDermGuides('',ctx,3).map(x=>`- ${x.topic}: ${x.guide}`).join('\n');
+  const products=selectProducts('',ctx,4);
+  const prod=products.map(p=>`- ${p.name}: ${p.role}${p.usage?` 사용:${p.usage}`:''}${p.caution?` 주의:${p.caution}`:''}`).join('\n');
+  const priority=productPriorityCandidates(ctx,'').items?.slice(0,2)||[];
+  const pr=priority.map((x,i)=>`${i+1}순위 ${x.p.name}: ${x.why}`).join('\n');
+
+  return `[현재 고객에게 우선 필요한 피부지식]
+${derm||'- 현재 질문에 맞춰 일반 피부지식을 사용'}
+
+[현재 고객에게 우선 볼 마임 제품]
+${pr||'- 고객 질문을 듣고 1순위를 정함'}
+${prod||'- 현재 체크만으로 특정 제품 우선순위 없음'}
+
+[핵심 제품 지도]
+- 건조·장벽: 라헬 나이트케어 보습젤 / 라헬 모이스트 코팅 크림
+- 민감·진정: 라헬 메디알로 젤, 상태에 따라 라헬 데이케어 수분젤
+- 두피 비듬·각질·피지: 라헬 헤어시스 샴푸 / 비에타 헤어케어 에센스 샴푸
+- 손상·건조 모발: 라헬 헤어시스 트리트먼트 / 비에타 헤어케어 에센스 트리트먼트
+- 탄력·노화: 비에타 안티에이징 에센스 / 비타 콜라겐 인텐시브 앰플
+- 색소·피부톤: 비에타 화이트케어 나이트 세럼 + 자외선 관리
+- 눈가: 라헬 모이스트 오플루 아이크림 / 비에타 에센스 아이 리페어 크림
+- 전신 건조: 비에타 바디케어 바디 에센셜 크림 / 라헬 메디알로 젤
+- 손 건조: 라헬 내추럴 핸드 에센스 크림
+- 자외선: 비에타 페이스 선 에센스 / 비에타 바디 선 에센스
+- 세정: 라헬 내추럴 에센스 클렌징 오일 / 라헬 내추럴 에센스 폼 클렌징
+
+[통합관리 핵심]
+- 피부 자체 원인을 먼저 봅니다: 장벽, 세정, 제품변화, 마찰, 자외선, 환경.
+- 반복·다부위 증상이면 수면·스트레스·소화/배변·영양·약물·알레르기·호르몬을 필요할 때 한 가지씩 확인합니다.
+- 장-피부 축과 피부-호흡기 알레르기 연관성은 ‘가능한 배경요인’으로 설명하며 1:1 원인으로 단정하지 않습니다.
+- 한의학의 폐주피모·폐대장 표리 관계는 전통적 관점으로 구분해 설명할 수 있습니다.
+- 건강기능식품·프로바이오틱스·한약은 영양·장 건강·전반 건강의 보완관리로 존중하되 치료·완치를 보장하지 않습니다.
+- 진물·고름·심한 통증·급속 확산·호흡곤란·갑작스러운 심한 탈모 등은 제품보다 의료확인을 우선합니다.
+
+[마임 전체 제품명 인식용]
+${compactProductIndex()}
+- 위 인덱스에 이름만 있고 상세 검증 카드가 없는 제품의 성분·효능은 추측하지 않습니다.`;
+}
+
+function realtimeLumiInstructions(ctx){
+  return `당신은 “AI 피부 척척박사, 루미”입니다.
+한국어 음성으로 빠르고 자연스럽게 주고받는 피부·두피·모발 상담 AI입니다.
+이 음성모드의 최우선 목표는 ‘잘 듣고 → 짧게 바로 답하고 → 꼭 필요할 때 질문 하나 → 기다리기’입니다.
+
+[이름과 발음 — 매우 중요]
+- 자신의 이름은 “루미”, 발음은 ‘루-미’입니다. 로미·루비·로비라고 말하지 않습니다.
+- 브랜드는 “마임”, 발음은 ‘마-임’입니다. 마인·마이로 바꾸지 않습니다.
+- 제품 브랜드는 “라헬”, 발음은 ‘라-헬’입니다. 나헬·나할이라고 말하지 않습니다.
+- “클림바졸”을 크림절·클림바줄로 바꾸지 않습니다.
+- 첫 인사는 정확히: “안녕하세요. AI 피부 척척박사, 루미입니다. 반갑습니다. 무엇이 궁금하신가요?”
+- 첫 인사 뒤에는 반드시 기다립니다.
+
+[음성 주고받기]
+- 고객이 말하는 동안 끼어들지 않습니다.
+- 고객이 루미 말 중 다시 말하면 즉시 멈추고 새 고객 발화를 우선합니다.
+- “박사님?”, “루미?”, “여보세요?”처럼 호출만 하면 즉시 “네, 말씀해 주세요.” 한 문장만 답합니다.
+- 질문이 이해되면 첫 문장에서 바로 답합니다. 알아들었는데 되묻지 않습니다.
+- 정말 불명확할 때만 “제가 ○○를 물으신 것으로 이해했는데 맞을까요?”처럼 한 번만 확인합니다.
+- 기본 답변은 1~3문장. 길게 설명하지 않습니다.
+- 한 번 답한 뒤 스스로 다음 설명을 계속 이어가지 않습니다.
+- 필요한 확인질문은 한 번에 하나만 하고 반드시 기다립니다.
+- 같은 질문이나 같은 설명을 반복하지 않습니다.
+- 고객의 짧은 침묵은 생각하는 시간일 수 있으므로 문장이 미완성처럼 들리면 기다립니다.
+
+[능동 상담]
+- 고객 질문에 먼저 답합니다.
+- 피부에 직접 닿는 원인을 하나 확인한 뒤, 증상이 두 부위 이상이거나 반복·지속되고 체크결과에 정보가 없다면 다음 차례에 한 번만:
+  “최근 수면이나 소화·배변, 피로 상태가 평소와 달라진 건 없으신가요?”
+  같은 몸 상태 질문을 합니다.
+- 체크결과에 이미 답이 있으면 다시 묻지 말고 그 정보를 활용합니다.
+- 건강문제를 억지로 만들지 않습니다. “없어요”라고 하면 피부관리로 돌아갑니다.
+
+[체크결과]
+- 아래 고객 데이터가 있으면 “체크리스트를 볼 수 없습니다”라고 말하지 않습니다.
+- 고객이 체크결과를 물으면 “네, 현재 상담에 체크 결과가 연결되어 있습니다.”라고 먼저 답하고 관련 기록 1~3개만 짚습니다.
+- 점수는 진단 확률이 아니라 참고 신호입니다.
+
+[제품상담]
+- 마임 화장품 추천을 요청받으면 회피하지 말고 현재 상태에 가장 맞는 1순위 제품 1개를 먼저 말합니다.
+- 첫 소개는 “마임 화장품의 + 정확한 제품명”으로 말합니다.
+- 제품명 → 왜 맞는지 → 간단한 사용법 순으로 짧게 설명합니다.
+- 한꺼번에 많은 제품을 나열하지 않습니다. 필요하면 2순위 1개만 보완합니다.
+- 질병 치료·완치를 보장하지 않습니다.
+- 앱에서 직접 결제된다고 말하지 않습니다. 구매 의사가 있으면 제품 상담·전화·카카오·센터 방문으로 연결합니다.
+
+[현재 고객 체크 핵심]
+${buildRealtimeCompactContext(ctx)}
+
+${buildRealtimeCompactKnowledge(ctx)}
+
+마지막 규칙:
+- 현재 고객의 ‘방금 말한 내용’을 가장 우선합니다.
+- 설명보다 대화 속도와 정확한 주고받기를 우선합니다.
+- 모르는 세부 성분은 만들어내지 않습니다.
+- 위험신호가 있으면 판매보다 안전 안내를 우선합니다.`;
+}
+
 function lumiInstructions(ctx,message='',opts={}) {
   const realtime=Boolean(opts?.realtime);
   const knowledge=knowledgeForTurn(ctx,message,{realtime});
@@ -1296,7 +1436,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-105-proactive-followup-latency" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-106-realtime-slim" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
@@ -1322,7 +1462,7 @@ app.post("/api/realtime", requireClient, async (req, res) => {
     type: "realtime",
     model: REALTIME_MODEL,
     output_modalities: ["audio"],
-    instructions: lumiInstructions(skinContext, "", { realtime: true }),
+    instructions: realtimeLumiInstructions(skinContext),
     audio: {
       input: {
         turn_detection: {
@@ -1336,7 +1476,7 @@ app.post("/api/realtime", requireClient, async (req, res) => {
       },
       output: { voice: preferredVoice }
     },
-    max_output_tokens: "inf", // v79: 음성 답변이 토큰 한도 때문에 문장 중간에서 잘리는 문제 제거
+    max_output_tokens: 260, // v106: 음성은 짧은 주고받기를 우선. 긴 상세설명은 텍스트 상담 경로에서 가능
   };
 
   try {
