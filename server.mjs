@@ -110,13 +110,174 @@ function productText(p,full=false){
   if(!full)return main;
   return `${main}\n전성분: ${p.ingredients}\n공식페이지: ${p.url}`;
 }
+
+function maiimProductByName(name){
+  return MAIIM_VERIFIED_PRODUCTS.find(p=>p.name===name)||null;
+}
+
+const MAIIM_PRODUCT_PRIORITY_RULES_V98 = [
+  {
+    id:'barrier', label:'건조·장벽',
+    keywords:/건조|당김|푸석|장벽|수분부족|보습/,
+    scoreKeys:['barrier'],
+    primary:'라헬 나이트케어 보습젤',
+    secondary:'라헬 데이케어 수분젤',
+    reason:'건조·당김·장벽 신호가 있을 때 보습과 수분 유지에 초점을 맞추기 좋습니다.'
+  },
+  {
+    id:'sensitive', label:'민감·홍조',
+    keywords:/민감|홍조|붉|따가|화끈|자극/,
+    scoreKeys:['sensitive'],
+    primary:'라헬 메디알로 젤',
+    secondary:'라헬 데이케어 수분젤',
+    reason:'자극을 줄이면서 보습·진정 중심으로 단순하게 관리할 때 우선 검토할 수 있습니다.'
+  },
+  {
+    id:'pigment', label:'피부톤·색소',
+    keywords:/기미|주근깨|잡티|검버섯|색소|피부톤|칙칙/,
+    scoreKeys:['pigment'],
+    primary:'비에타 화이트케어 데이 세럼',
+    secondary:'비에타 화이트케어 나이트 세럼',
+    reason:'피부톤 관리 목적의 기능성 화장품으로 낮·밤 루틴에 나누어 접근할 수 있습니다.'
+  },
+  {
+    id:'aging', label:'탄력·주름',
+    keywords:/주름|탄력|노화|처짐|팔자|이마/,
+    scoreKeys:['aging'],
+    primary:'비에타 안티에이징 에센스',
+    secondary:'비타 콜라겐 인텐시브 앰플',
+    reason:'탄력·주름 고민과 공식 제품 역할이 직접 연결되는 제품군입니다.'
+  },
+  {
+    id:'eye', label:'눈가',
+    keywords:/눈가|다크서클|눈밑|꺼짐|눈주름/,
+    scoreKeys:[],
+    primary:'비에타 에센스 아이 리페어 크림',
+    secondary:'라헬 모이스트 오플루 아이크림',
+    reason:'눈가 보습·탄력·주름 관리 목적에 맞는 전용 제품을 우선 보는 것이 좋습니다.'
+  },
+  {
+    id:'scalp', label:'두피 비듬·각질·피지',
+    keywords:/두피|비듬|각질|가려움|기름|피지|샴푸/,
+    scoreKeys:['scalp'],
+    primary:'라헬 헤어시스 샴푸',
+    secondary:'비에타 헤어케어 에센스 샴푸',
+    reason:'두피 세정과 비듬·각질·피지 관리 목적에 직접 연결되는 샴푸 제품군입니다.'
+  },
+  {
+    id:'hair', label:'모발 손상·건조',
+    keywords:/모발|머릿결|손상모|건조모|트리트먼트|헤어에센스/,
+    scoreKeys:[],
+    primary:'라헬 헤어시스 트리트먼트',
+    secondary:'라헬 헤어시스 헤어 에센스',
+    reason:'두피가 아니라 모발 손상·건조가 중심일 때 컨디셔닝과 보호에 초점을 둡니다.'
+  },
+  {
+    id:'bodydry', label:'전신 건조·가려움',
+    keywords:/몸|전신|바디|팔|다리|건조|가려움/,
+    scoreKeys:['bodyitch','barrier'],
+    primary:'비에타 바디케어 바디 에센셜 크림',
+    secondary:'라헬 메디알로 젤',
+    reason:'전신 건조와 보습이 중심이면 크림·젤 제형을 상태에 따라 나누어 볼 수 있습니다.'
+  },
+  {
+    id:'hand', label:'손 건조·거칠음',
+    keywords:/손|핸드|손등|갈라짐/,
+    scoreKeys:[],
+    primary:'라헬 내추럴 핸드 에센스 크림',
+    secondary:null,
+    reason:'손의 건조·거칠음 관리 목적에 가장 직접적인 제품입니다.'
+  },
+  {
+    id:'sun', label:'자외선',
+    keywords:/자외선|선크림|햇빛|spf|선케어/,
+    scoreKeys:[],
+    primary:'비에타 페이스 선 에센스 SPF35 PA++',
+    secondary:null,
+    reason:'얼굴 자외선 차단 목적에 맞는 제품이며 충분한 양과 재도포가 중요합니다.'
+  }
+];
+
+function maiimProductPriorityGuideV98(ctx,message=''){
+  const c=clean(ctx)||{};
+  const lumi=c.lumi||{};
+  const scores=lumi?.basicAnalysis?.scores&&typeof lumi.basicAnalysis.scores==='object'?lumi.basicAnalysis.scores:{};
+  const precision=Array.isArray(lumi.completedPrecision)?lumi.completedPrecision:[];
+  const concerns=Array.isArray(lumi.concerns)?lumi.concerns:[];
+  const actual=[];
+  const urgent=[];
+  const caution=[];
+  for(const p of precision){
+    for(const x of (Array.isArray(p.urgentRisks)?p.urgentRisks:[])) urgent.push(String(x));
+    for(const x of (Array.isArray(p.risks)?p.risks:[])) caution.push(String(x));
+    for(const a of (Array.isArray(p.answers)?p.answers:[])){
+      const v=Number(a?.value||0);
+      if(v>=2)actual.push(`${a?.question||''} ${a?.answer||''}`);
+    }
+  }
+  const combined=normText([
+    message,
+    lumi.area||'',
+    concerns.join(' '),
+    actual.join(' '),
+    c.selfConcern||'',
+    c.primary||'',
+    c.secondary||''
+  ].join(' '));
+
+  const severeText=[...urgent,...caution,combined].join(' ');
+  const medicalFirst = urgent.length>0 || /호흡|입술.*붓|혀.*붓|고름|진물|출혈|심한 통증|급격.*탈모|빠르게.*번|열감.*심/.test(severeText);
+
+  const ranked=MAIIM_PRODUCT_PRIORITY_RULES_V98.map(r=>{
+    let score=0;
+    if(r.keywords.test(combined))score+=8;
+    for(const k of r.scoreKeys||[]){
+      const v=Number(scores?.[k]||0);
+      score+=Math.min(8,v/12.5);
+    }
+    if(actual.some(x=>r.keywords.test(normText(x))))score+=4;
+    return {...r,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+
+  if(medicalFirst){
+    return `[마임 화장품 추천 우선순위 — v98 안전모드]
+- 현재 기록에는 제품 추천보다 먼저 확인해야 할 위험/주의 신호가 있습니다.
+- 우선: 의료기관 확인 또는 증상 원인 확인.
+- 제품은 진단·치료를 대신하지 않으며, 상태가 안정된 뒤 보습·세정·자극회피 보조수단으로 검토합니다.
+- 확인된 위험/주의: ${[...urgent,...caution].slice(0,5).join(' / ')||'현재 고객 발화에서 위험신호 감지'}
+- 이 상황에서는 판매 연결을 먼저 하지 않습니다.`;
+  }
+
+  if(!ranked.length){
+    return `[마임 화장품 추천 우선순위 — v98]
+- 현재 정보만으로는 1순위 제품을 단정하지 않습니다.
+- 고객이 제품 추천을 원하면 가장 불편한 부위와 고민 하나만 확인한 뒤 1순위 1개부터 제안합니다.
+- 제품을 많이 나열하지 않습니다.`;
+  }
+
+  const top=ranked[0];
+  const secondRule=ranked.find(x=>x.id!==top.id);
+  const p1=maiimProductByName(top.primary);
+  const p2name=top.secondary || secondRule?.primary || null;
+  const p2=p2name?maiimProductByName(p2name):null;
+
+  return `[마임 화장품 추천 우선순위 — v98]
+- 현재 최우선 고민 분야: ${top.label}
+- 1순위: ${p1?`마임 화장품의 ${p1.name}`:`마임 화장품의 ${top.primary}`}
+- 1순위 이유: ${top.reason}
+- 2순위/보완: ${p2?`마임 화장품의 ${p2.name}`:(p2name?`마임 화장품의 ${p2name}`:'필요할 때만 추가')}
+- 추천 화법: 먼저 1순위 하나를 분명하게 권하고, 이유 2가지만 설명한 뒤 사용법을 안내합니다.
+- 2순위는 고객이 더 원하거나 1순위만으로 부족할 때만 제시합니다.
+- 판매 연결: 고객이 관심을 보이면 앱의 '제품 상담하기' 또는 전화·카카오·센터 방문 상담으로 연결합니다.
+- 금지: 질병 치료·완치 보장, 공포·압박 판매, 필요 없는 여러 제품 묶음 추천.`;
+}
 function knowledgeForTurn(ctx,message,{realtime=false}={}){
   if(realtime) return realtimeKnowledgeForSession(ctx);
   const derm=selectDermGuides(message,ctx,4).map(x=>`- ${x.topic}: ${x.guide}`).join('\n');
   const ingredients=selectIngredients(message,realtime?14:8).map(x=>`- ${x.name}: ${x.use} 주의: ${x.caution}`).join('\n');
   const products=selectProducts(message,ctx,7);
   const prod=products.map(p=>productText(p,false)).join('\n\n');
-  return `[관련 피부 전문지식]\n${derm||'- 필요 정보에 맞춰 추가 질문'}\n\n[관련 성분 지식]\n${ingredients||'- 질문에 특정 성분이 있으면 기능과 주의를 구분해 설명'}\n\n[MAIIM 공식 제품 지식]\n${prod||'- 공식 상세 검증 제품을 찾지 못함'}\n\n[MAIIM 현재 전체 제품명 인덱스]\n${compactProductIndex()}\n\n[대표 타사 제품 비교 참고]\n${competitorReferenceText()}`;
+  return `[관련 피부 전문지식]\n${derm||'- 필요 정보에 맞춰 추가 질문'}\n\n[관련 성분 지식]\n${ingredients||'- 질문에 특정 성분이 있으면 기능과 주의를 구분해 설명'}\n\n${maiimProductPriorityGuideV98(ctx,message)}\n\n[MAIIM 공식 제품 지식]\n${prod||'- 공식 상세 검증 제품을 찾지 못함'}\n\n[MAIIM 현재 전체 제품명 인덱스]\n${compactProductIndex()}\n\n[대표 타사 제품 비교 참고]\n${competitorReferenceText()}`;
 }
 
 
@@ -266,6 +427,8 @@ ${MAIIM_QUICK_RECOMMENDATION_MAP}
 - 고객이 타사 제품과 비교를 요청하면 타사를 깎아내리지 않고 장단점을 설명한 뒤, 현재 고객 상태와 마임 제품이 잘 맞는 이유를 구체적으로 연결합니다.
 - 가격이나 브랜드 이미지보다 ‘고객 상태와의 적합성’을 판매의 중심으로 둡니다.
 - 상담 마지막에는 필요한 경우 자연스럽게 다음 행동을 제안합니다. 예: “원하시면 이 제품을 어떤 순서로 쓰면 좋은지 바로 정리해 드릴까요?” 또는 “구매 상담 연결 방법도 안내해 드릴까요?”
+
+${maiimProductPriorityGuideV98(ctx,'')}
 
 [마임 화장품 공식 검증 제품 핵심카드]
 ${realtimeProductCards()}
@@ -556,6 +719,11 @@ ${checkCompletionGuide(ctx)}
 - “가려움 관련 항목이 33점으로 기록되어 있고, 실제 답변에서 3개월 지속·비듬·뾰루지가 확인됩니다”처럼 점수보다 실제 답변을 중심으로 설명합니다.
 
 [상담형 영업력 · 신뢰 있게 이끄는 제품 안내]
+- v98 우선순위 원칙: 제품 추천 시 1순위 제품 하나를 먼저 확정하고, 2순위는 보완이 필요할 때만 제시합니다.
+- 체크결과가 여러 분야에서 높더라도 제품을 3~5개씩 한꺼번에 나열하지 않습니다. 가장 불편한 현재 고민과 실제 정밀답변을 기준으로 하나를 먼저 고릅니다.
+- 제품 추천보다 진료 확인이 우선인 위험신호가 있으면 판매 연결을 중단하고 안전 안내부터 합니다.
+- 같은 고민에서 1순위 제품을 이미 설명했다면 다음 답변에서 새 제품을 자꾸 바꾸지 않습니다. 고객이 부작용·사용감·가격대·제형 선호 등 새 정보를 주었을 때만 우선순위를 다시 조정합니다.
+
 - v97 추가 원칙: 고객이 제품 추천을 명확히 요청하면 ‘정보만 제공하고 판단은 전적으로 고객에게’ 식으로 지나치게 물러서지 않습니다. 적합성이 확인되면 전문가처럼 우선순위를 정해 분명하게 추천합니다.
 - 추천 문장 예시: “현재 체크 결과와 말씀하신 고민을 보면 마임 화장품의 ○○가 가장 먼저 볼 제품입니다. 이유는 첫째…, 둘째…입니다.”
 - 판매 연결 문장 예시: “이 제품이 현재 고민과 잘 맞으니 사용해 보시는 것을 권합니다. 원하시면 앱의 제품 상담·구매하기 또는 전화·카카오·센터 방문으로 바로 연결할 수 있습니다.”
@@ -656,7 +824,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-97-trusted-sales-doctor" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-98-product-priority" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
