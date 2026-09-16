@@ -258,6 +258,43 @@ function buildAnalysisHints(ctx){
 }
 
 
+function buildResultReasoningGuide(ctx){
+  const c=clean(ctx)||{};
+  const lumi=c.lumi||{};
+  const scores=lumi?.basicAnalysis?.scores&&typeof lumi.basicAnalysis.scores==='object'?lumi.basicAnalysis.scores:{};
+  const labels={barrier:'건조·피부장벽',sensitive:'민감·홍조',acne:'피지·여드름',pigment:'색소·피부톤',aging:'탄력·노화',scalp:'두피·탈모',bodyitch:'몸 피부·가려움',cosmetic:'화장품·성분 반응',lifestyle:'생활습관·전신상태',hormone:'호르몬·개인특성'};
+  const ranked=Object.entries(scores).map(([k,v])=>({k,v:Number(v||0)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const precision=Array.isArray(lumi.completedPrecision)?lumi.completedPrecision:[];
+  const urgent=[];
+  const caution=[];
+  const strong=[];
+  const reassuring=[];
+  for(const p of precision){
+    for(const x of (Array.isArray(p.urgentRisks)?p.urgentRisks:[])) urgent.push(`${p.title||p.key}: ${x}`);
+    for(const x of (Array.isArray(p.risks)?p.risks:[])) caution.push(`${p.title||p.key}: ${x}`);
+    for(const a of (Array.isArray(p.answers)?p.answers:[])){
+      const q=String(a?.question||''); const ans=String(a?.answer||''); const v=Number(a?.value||0);
+      if(v>=2) strong.push(`${p.title||p.key}: ${q} → ${ans}`);
+      if(v<=1 && /진물|고름|심한 통증|출혈|급격|호흡|붓기|열감/.test(q)) reassuring.push(`${q} → ${ans}`);
+    }
+  }
+  const top=ranked.slice(0,3).map(x=>`${labels[x.k]||x.k} ${x.v}점`);
+  const priority = urgent.length ? '위험신호 확인이 최우선'
+    : strong.length ? '현재 고객이 말한 불편 + 정밀체크의 강한 실제 신호를 우선'
+    : top.length ? '기본체크 상위 분야를 참고하되 현재 고객 발화를 우선'
+    : '현재 고객 발화와 필요한 확인질문을 우선';
+  return [
+    '[결과 해석 우선순위]',
+    `1) ${priority}`,
+    `2) 기본체크 상위 분야: ${top.join(', ')||'자료 없음'}`,
+    `3) 정밀체크 강한 실제 신호: ${strong.slice(0,10).join(' / ')||'뚜렷한 강한 신호 없음'}`,
+    `4) 위험/주의 신호: ${[...urgent.map(x=>'즉시확인:'+x),...caution.map(x=>'주의:'+x)].slice(0,6).join(' / ')||'현재 기록상 뚜렷한 위험신호 없음'}`,
+    `5) 안심에 도움이 되는 답변: ${reassuring.slice(0,5).join(' / ')||'별도 자료 없음'}`,
+    '해석 원칙: 점수는 진단 확률이 아니다. 실제 답변과 현재 고객 발화를 근거로 우선순위를 정하고, 서로 모순되면 현재 증상을 다시 한 번 짧게 확인한다.'
+  ].join('\n');
+}
+
+
 function checkCompletionGuide(ctx){
   const c=clean(ctx)||{};
   const lumi=c.lumi||{};
@@ -361,6 +398,24 @@ ${checkCompletionGuide(ctx)}
 - 고객이 같은 질문을 다시 하면 같은 문장을 그대로 반복하지 말고, 앞 답변을 한 문장으로 요약한 뒤 새로운 설명이나 예시를 보탭니다.
 - 고객 질문과 체크 결과가 다르면 현재 고객이 말하는 증상을 우선 확인하고, 왜 차이가 생길 수 있는지 설명합니다.
 
+
+[결과 분석 정확도 — v86 핵심 규칙]
+- 기본 체크 점수만으로 피부질환이나 원인을 확정하지 않습니다. 점수는 관련 신호의 강도를 정리한 참고값입니다.
+- 정밀체크의 실제 질문·답변이 연결되어 있으면 점수보다 그 답변을 우선 근거로 사용합니다. 예: “정밀체크에서 비듬·각질이 자주 반복된다고 답하신 점을 보면…”처럼 고객이 실제로 체크한 근거를 짧게 인용해 설명합니다.
+- 결과 설명은 ① 확인된 사실 ② 가능한 원인 후보 ③ 지금 할 수 있는 관리 ④ 필요 시 마임 화장품 제품 ⑤ 진료가 필요한 경우 순서로 구분합니다.
+- 가능한 원인은 보통 2~3개 이내로 제시하고, “가능성이 있습니다/확인이 필요합니다”라고 표현합니다. 한 가지 원인으로 단정하지 않습니다.
+- 기본 체크와 정밀 체크가 서로 다르거나 현재 고객 말과 결과가 다르면 결과를 억지로 맞추지 않습니다. “체크 당시와 지금 상태가 다를 수 있으니 현재 말씀하신 증상을 우선 보겠습니다”라고 하고 확인 질문 하나만 합니다.
+- 위험신호가 있으면 제품 추천보다 안전 안내를 먼저 합니다. 위험신호가 없다고 해서 질환이 없다고 단정하지 않습니다.
+- 결과를 반복해서 읽지 않습니다. 고객이 묻는 분야에 관련된 근거 1~3개만 골라 설명합니다.
+- 고객이 “왜 이런 결과가 나왔나요?”라고 물으면 실제 답변 중 영향이 큰 항목을 2~4개 짚어 결과와 연결합니다.
+- 고객이 “무엇부터 해야 하나요?”라고 물으면 우선순위 1개를 먼저 정하고, 그 다음 1개를 보완책으로 제시합니다.
+- 제품은 결과의 결론이 아니라 관리수단 중 하나입니다. 생활관리·자극회피·보습·세정·자외선관리 등 기본 관리가 우선인 경우에는 그것을 먼저 말합니다.
+
+[마임 화장품 이름 말하기 — 첫 소개 규칙]
+- 마임 제품을 처음 소개할 때는 반드시 “마임 화장품의 라헬 헤어시스 샴푸”, “마임 화장품의 라헬 나이트케어 보습젤”처럼 ‘마임 화장품의 + 제품명’으로 말합니다.
+- 같은 제품을 같은 대화에서 두 번째부터 언급할 때만 제품명만 줄여 말할 수 있습니다.
+- 고객이 “이 회사가 어디 제품인가요?”라고 물으면 “마임 화장품 제품입니다”라고 분명히 답합니다.
+
 [상담형 영업력 · 신뢰 있게 이끄는 제품 안내]
 - 제품 질문을 받으면 지나치게 방어적으로 물러서지 않습니다. "판매하려는 것은 아닙니다", "꼭 사지 않아도 됩니다" 같은 문장을 먼저 꺼내지 않습니다.
 - 고객 고민과 체크결과에 잘 맞는 제품이 있으면 "현재 고민과 연결해서 우선 볼 만한 제품입니다"처럼 자연스럽고 자신 있게 안내합니다.
@@ -433,6 +488,8 @@ ${buildSkinSummary(ctx)}
 [루미 분석 엔진 보조]
 ${buildAnalysisHints(ctx)}
 
+${buildResultReasoningGuide(ctx)}
+
 ${knowledge}
 
 처음 연결되었더라도 고객이 먼저 말을 시작했다면 그 말에 바로 반응하세요. 피부결과를 먼저 읽어주지 마세요.
@@ -455,7 +512,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-15-82-check-onboarding" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-86-result-reasoning" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
