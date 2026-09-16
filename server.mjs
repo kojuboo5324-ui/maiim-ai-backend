@@ -1930,7 +1930,7 @@ function extractResponseText(data) {
 }
 
 app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-107-restore-v103-voice" });
+  res.json({ ok: true, service: "MAIIM LUMI AI", version: "2026-09-16-108-voice-timing-balance" });
 });
 
 app.get("/health", requireClient, (_req, res) => {
@@ -1961,9 +1961,9 @@ app.post("/api/realtime", requireClient, async (req, res) => {
       input: {
         turn_detection: {
           type: "semantic_vad",
-          // v107: 실제 상담에서 가장 안정적이었던 v103 기준 복원
-          // 고객의 짧은 생각 시간을 충분히 기다리고, 고객이 다시 말하면 루미 응답은 즉시 중단
-          eagerness: "low",
+          // v108: v107에서 응답 시작이 너무 늦어진 원인을 보정.
+          // 과거 반응이 좋았던 medium 타이밍 + 고객 끼어들기 즉시중단(true) 조합.
+          eagerness: "medium",
           create_response: true,
           interrupt_response: true
         }
